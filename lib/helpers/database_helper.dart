@@ -1,9 +1,11 @@
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import '../models/produk.dart';
+import '../models/karyawan.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -21,6 +23,10 @@ class DatabaseHelper {
     return _database!;
   }
 
+  // ============================================================
+  // INISIALISASI DATABASE
+  // ============================================================
+
   Future<Database> _initDB(String filePath) async {
     // Khusus Flutter Web / Chrome
     if (kIsWeb) {
@@ -29,8 +35,9 @@ class DatabaseHelper {
       return await databaseFactory.openDatabase(
         filePath,
         options: OpenDatabaseOptions(
-          version: 1,
+          version: 2,
           onCreate: _createDB,
+          onUpgrade: _onUpgradeDB,
         ),
       );
     }
@@ -41,8 +48,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _onUpgradeDB,
     );
   }
 
@@ -54,6 +62,7 @@ class DatabaseHelper {
     Database db,
     int version,
   ) async {
+    // Membuat tabel produk
     await db.execute('''
       CREATE TABLE produk (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,19 +78,67 @@ class DatabaseHelper {
       )
     ''');
 
-    // Seed 6 produk awal dari model Produk
+    // Memasukkan 6 produk awal
     for (final produk in produkAwalSQLite) {
       await db.insert(
         'produk',
         produk.toMap(),
       );
     }
+
+    // Membuat tabel karyawan
+    await db.execute('''
+      CREATE TABLE karyawan (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nama_karyawan TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        peran TEXT NOT NULL
+      )
+    ''');
+
+    // Memasukkan data karyawan awal
+    await db.rawInsert('''
+      INSERT INTO karyawan (nama_karyawan, pin, peran)
+      VALUES ('Ahmad Kasir', '1234', 'Kasir')
+    ''');
+
+    await db.rawInsert('''
+      INSERT INTO karyawan (nama_karyawan, pin, peran)
+      VALUES ('Siti Supervisor', '8888', 'Manajer')
+    ''');
   }
 
   // ============================================================
-  // CREATE / INSERT
+  // DATABASE MIGRATION: VERSI 1 KE VERSI 2
   // ============================================================
 
+  Future<void> _onUpgradeDB(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS karyawan (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nama_karyawan TEXT NOT NULL,
+          pin TEXT NOT NULL,
+          peran TEXT NOT NULL
+        )
+      ''');
+
+      await db.rawInsert('''
+        INSERT INTO karyawan (nama_karyawan, pin, peran)
+        VALUES ('Ahmad Kasir', '1234', 'Kasir')
+      ''');
+    }
+  }
+
+  // ============================================================
+  // CRUD PRODUK
+  // ============================================================
+
+  // CREATE / INSERT PRODUK
   Future<int> insertProduk(Produk produk) async {
     final db = await instance.database;
 
@@ -92,10 +149,7 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================================
-  // READ / GET ALL
-  // ============================================================
-
+  // READ / GET ALL PRODUK
   Future<List<Produk>> getAllProduk() async {
     final db = await instance.database;
 
@@ -109,16 +163,12 @@ class DatabaseHelper {
         .toList();
   }
 
-  // ============================================================
   // READ / FILTER KATEGORI
-  // ============================================================
-
   Future<List<Produk>> getProdukByKategori(
     String kategori,
   ) async {
     final db = await instance.database;
 
-    // Jika memilih "Semua", ambil seluruh produk
     if (kategori == 'Semua') {
       return await getAllProduk();
     }
@@ -135,10 +185,7 @@ class DatabaseHelper {
         .toList();
   }
 
-  // ============================================================
   // SEARCH / SQL LIKE
-  // ============================================================
-
   Future<List<Produk>> searchProduk(
     String keyword,
   ) async {
@@ -156,10 +203,7 @@ class DatabaseHelper {
         .toList();
   }
 
-  // ============================================================
-  // UPDATE
-  // ============================================================
-
+  // UPDATE PRODUK
   Future<int> updateProduk(Produk produk) async {
     final db = await instance.database;
 
@@ -171,15 +215,63 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================================
-  // DELETE
-  // ============================================================
-
+  // DELETE PRODUK
   Future<int> deleteProduk(int id) async {
     final db = await instance.database;
 
     return await db.delete(
       'produk',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ============================================================
+  // CRUD KARYAWAN
+  // ============================================================
+
+  // CREATE / INSERT KARYAWAN
+  Future<int> insertKaryawan(Karyawan karyawan) async {
+    final db = await instance.database;
+
+    return await db.insert(
+      'karyawan',
+      karyawan.toMap(),
+    );
+  }
+
+  // READ / GET ALL KARYAWAN
+  Future<List<Karyawan>> getAllKaryawan() async {
+    final db = await instance.database;
+
+    final result = await db.query(
+      'karyawan',
+      orderBy: 'id ASC',
+    );
+
+    return result
+        .map((json) => Karyawan.fromMap(json))
+        .toList();
+  }
+
+  // UPDATE KARYAWAN
+  Future<int> updateKaryawan(Karyawan karyawan) async {
+    final db = await instance.database;
+
+    return await db.update(
+      'karyawan',
+      karyawan.toMap(),
+      where: 'id = ?',
+      whereArgs: [karyawan.id],
+    );
+  }
+
+  // DELETE KARYAWAN
+  Future<int> deleteKaryawan(int id) async {
+    final db = await instance.database;
+
+    return await db.delete(
+      'karyawan',
       where: 'id = ?',
       whereArgs: [id],
     );
